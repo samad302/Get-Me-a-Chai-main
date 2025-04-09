@@ -34,6 +34,14 @@ const authOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      authorization: {
+        params: {
+          redirect_uri: `${process.env.NEXTAUTH_URL}/api/auth/callback/google`,
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code"
+        },
+      },
     }),
   ],
   secret: process.env.NEXTAUTH_SECRET,
@@ -50,6 +58,11 @@ const authOptions = {
           throw new Error("Email required for authentication");
         }
 
+        // For Google provider, ensure email is verified
+        if (account.provider === "google" && !profile.email_verified) {
+          throw new Error("Google email not verified");
+        }
+
         const existingUser = await User.findOne({ email: user.email });
 
         if (!existingUser) {
@@ -62,7 +75,7 @@ const authOptions = {
             email: user.email,
             name: user.name || profile?.name || profile?.login || 'User',
             username: username.substring(0, 20),
-            profilePic: user.image || profile?.avatar_url || '',
+            profilePic: user.image || profile?.avatar_url || profile?.picture || '',
             provider: account.provider
           });
         }
@@ -78,7 +91,7 @@ const authOptions = {
         await connectDB();
         if (session?.user?.email) {
           const dbUser = await User.findOne({ email: session.user.email })
-            .select('_id username name profilePic')
+            .select('_id username name profilePic provider')
             .lean();
             
           if (dbUser) {
@@ -86,6 +99,7 @@ const authOptions = {
             session.user.username = dbUser.username;
             session.user.name = dbUser.name;
             session.user.image = dbUser.profilePic;
+            session.user.provider = dbUser.provider;
           }
         }
         return session;
@@ -94,9 +108,12 @@ const authOptions = {
         return session;
       }
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account, profile }) {
       if (user) {
         token.id = user.id;
+      }
+      if (account) {
+        token.provider = account.provider;
       }
       return token;
     }
