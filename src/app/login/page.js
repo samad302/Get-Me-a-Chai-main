@@ -1,11 +1,12 @@
 'use client'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, Suspense } from 'react'
 import { useSession, signIn } from "next-auth/react"
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
-const Login = () => {
+// Wrap the component that uses useSearchParams
+const LoginContent = () => {
     const { data: session } = useSession()
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -17,7 +18,6 @@ const Login = () => {
 
     useEffect(() => {
         if (session) {
-            // Redirect to dashboard or previous page
             const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
             router.push(callbackUrl)
         }
@@ -26,7 +26,6 @@ const Login = () => {
     useEffect(() => {
         if (error) {
             let errorMessage = error
-            // Handle common error cases
             if (error.includes('redirect_uri')) {
                 errorMessage = "Authentication configuration error - please try again later"
             } else if (error.includes('AccessDenied')) {
@@ -43,7 +42,6 @@ const Login = () => {
                 theme: "colored",
             })
             
-            // Clean the error from URL
             router.replace('/login')
         }
     }, [error, router])
@@ -51,8 +49,6 @@ const Login = () => {
     const handleSignIn = async (provider) => {
         try {
             setIsLoading(prev => ({ ...prev, [provider]: true }))
-            
-            // Get any callback URL from query params
             const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
             
             const result = await signIn(provider, {
@@ -62,8 +58,6 @@ const Login = () => {
 
             if (result?.error) {
                 let errorMessage = result.error
-                
-                // Handle specific OAuth errors
                 if (result.error.includes('OAuthAccountNotLinked')) {
                     errorMessage = "This email is already associated with another login method"
                 }
@@ -78,7 +72,6 @@ const Login = () => {
                     theme: "colored",
                 })
             } else if (result?.url) {
-                // Handle successful sign-in redirect
                 router.push(result.url)
             }
         } catch (error) {
@@ -181,6 +174,15 @@ const Login = () => {
                 </div>
             </div>
         </>
+    )
+}
+
+// Main login component with Suspense boundary
+const Login = () => {
+    return (
+        <Suspense fallback={<div className="flex justify-center items-center h-screen">Loading authentication...</div>}>
+            <LoginContent />
+        </Suspense>
     )
 }
 
