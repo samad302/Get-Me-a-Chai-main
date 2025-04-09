@@ -6,6 +6,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
+<<<<<<< HEAD
+=======
+// Wrap the component that uses useSearchParams in Suspense
+>>>>>>> 676cdd15c4af366209c31334c5ef07ea43f3167b
 const LoginContent = () => {
     const { data: session } = useSession()
     const router = useRouter()
@@ -24,7 +28,19 @@ const LoginContent = () => {
 
     useEffect(() => {
         if (error) {
+<<<<<<< HEAD
             showErrorToast(error)
+=======
+            toast.error(error, {
+                position: "top-center",
+                autoClose: 5000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+                theme: "colored",
+            })
+>>>>>>> 676cdd15c4af366209c31334c5ef07ea43f3167b
         }
     }, [error])
 
@@ -49,6 +65,7 @@ const LoginContent = () => {
             })
 
             if (result?.error) {
+<<<<<<< HEAD
                 showErrorToast(result.error)
             } else if (result?.url) {
                 router.push(result.url)
@@ -56,6 +73,28 @@ const LoginContent = () => {
         } catch (error) {
             showErrorToast("An unexpected error occurred")
             console.error("Authentication error:", error)
+=======
+                toast.error(result.error, {
+                    position: "top-center",
+                    autoClose: 5000,
+                    hideProgressBar: false,
+                    closeOnClick: true,
+                    pauseOnHover: true,
+                    draggable: true,
+                    theme: "colored",
+                })
+            }
+        } catch (error) {
+            toast.error("An unexpected error occurred", {
+                position: "top-center",
+                autoClose: 5000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+                theme: "colored",
+            })
+>>>>>>> 676cdd15c4af366209c31334c5ef07ea43f3167b
         } finally {
             setIsLoading(prev => ({ ...prev, [provider]: false }))
         }
@@ -119,12 +158,23 @@ const LoginContent = () => {
     )
 }
 
+<<<<<<< HEAD
 const Login = () => {
     return (
         <Suspense fallback={<div className="flex justify-center items-center h-screen">Loading authentication...</div>}>
+=======
+// Main Login component with Suspense boundary
+const Login = () => {
+    return (
+        <Suspense fallback={<div>Loading authentication...</div>}>
+>>>>>>> 676cdd15c4af366209c31334c5ef07ea43f3167b
             <LoginContent />
         </Suspense>
     )
 }
 
+<<<<<<< HEAD
 export default Login
+=======
+export default Login
+>>>>>>> 676cdd15c4af366209c31334c5ef07ea43f3167b
