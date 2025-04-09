@@ -3,6 +3,7 @@
     "/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
+      "static/css/app/login/page.css",
       "static/chunks/app/login/page.js"
     ],
     "/layout": [
@@ -22,6 +23,11 @@
       "static/chunks/main-app.js",
       "static/css/app/[username]/page.css",
       "static/chunks/app/[username]/page.js"
+    ],
+    "/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/page.js"
     ]
   }
 }

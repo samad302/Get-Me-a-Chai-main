@@ -4,21 +4,28 @@ import GoogleProvider from 'next-auth/providers/google';
 import User from '@/models/User';
 import connectDB from '@/db/connectDB';
 
-// Validate critical environment variables
-const requiredEnvVars = [
-  'GITHUB_CLIENT_ID',
-  'GITHUB_CLIENT_SECRET',
-  'GOOGLE_CLIENT_ID',
-  'GOOGLE_CLIENT_SECRET',
-  'NEXTAUTH_SECRET',
-  'NEXTAUTH_URL'
-];
+// Enhanced environment validation
+const validateEnv = () => {
+  const requiredEnvVars = [
+    'GITHUB_CLIENT_ID',
+    'GITHUB_CLIENT_SECRET',
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET',
+    'NEXTAUTH_SECRET',
+    'NEXTAUTH_URL'
+  ];
 
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    throw new Error(`Missing required environment variable: ${envVar}`);
+  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+  if (missingVars.length > 0) {
+    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
   }
-}
+
+  // Validate URL format
+  if (process.env.NODE_ENV === 'production' && !process.env.NEXTAUTH_URL?.startsWith('https://')) {
+    throw new Error('NEXTAUTH_URL must use HTTPS in production');
+  }
+};
+validateEnv();
 
 const authOptions = {
   providers: [
@@ -28,6 +35,7 @@ const authOptions = {
       authorization: {
         params: {
           redirect_uri: `${process.env.NEXTAUTH_URL}/api/auth/callback/github`,
+          scope: 'user:email', // Ensure we get email scope
         },
       },
     }),
@@ -39,7 +47,8 @@ const authOptions = {
           redirect_uri: `${process.env.NEXTAUTH_URL}/api/auth/callback/google`,
           prompt: "consent",
           access_type: "offline",
-          response_type: "code"
+          response_type: "code",
+          scope: 'openid email profile', // Explicitly request required scopes
         },
       },
     }),
@@ -58,9 +67,16 @@ const authOptions = {
           throw new Error("Email required for authentication");
         }
 
-        // For Google provider, ensure email is verified
-        if (account.provider === "google" && !profile.email_verified) {
-          throw new Error("Google email not verified");
+        // Enhanced provider-specific validation
+        if (account.provider === "google") {
+          if (!profile.email_verified) {
+            throw new Error("Google email not verified");
+          }
+          // Ensure we have profile picture from Google
+          user.image = user.image || profile.picture;
+        } else if (account.provider === "github") {
+          // Ensure we have profile picture from GitHub
+          user.image = user.image || profile.avatar_url;
         }
 
         const existingUser = await User.findOne({ email: user.email });
@@ -75,7 +91,7 @@ const authOptions = {
             email: user.email,
             name: user.name || profile?.name || profile?.login || 'User',
             username: username.substring(0, 20),
-            profilePic: user.image || profile?.avatar_url || profile?.picture || '',
+            profilePic: user.image || '',
             provider: account.provider
           });
         }
@@ -83,10 +99,14 @@ const authOptions = {
         return true;
       } catch (error) {
         console.error("Authentication Error:", error);
-        return `/login?error=${encodeURIComponent(error.message || "Authentication failed")}`;
+        // Return URL with encoded error message
+        const errorMessage = error.message.includes("redirect_uri") 
+          ? "Authentication configuration error - please contact support"
+          : error.message || "Authentication failed";
+        return `/login?error=${encodeURIComponent(errorMessage)}`;
       }
     },
-    async session({ session }) {
+    async session({ session, token }) {
       try {
         await connectDB();
         if (session?.user?.email) {
@@ -102,22 +122,40 @@ const authOptions = {
             session.user.provider = dbUser.provider;
           }
         }
+        // Add token data to session
+        if (token) {
+          session.error = token.error;
+        }
         return session;
       } catch (error) {
         console.error("Session Error:", error);
+        session.error = "Session error";
         return session;
       }
     },
-    async jwt({ token, user, account, profile }) {
+    async jwt({ token, user, account, profile, trigger, session }) {
+      // Persist user data in token
       if (user) {
         token.id = user.id;
+        token.email = user.email;
       }
       if (account) {
         token.provider = account.provider;
       }
+      // Handle session updates
+      if (trigger === "update" && session?.user) {
+        token.name = session.user.name;
+        token.picture = session.user.image;
+      }
       return token;
     }
-  }
+  },
+  // Additional security settings
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  debug: process.env.NODE_ENV === 'development',
 };
 
 const handler = NextAuth(authOptions);
