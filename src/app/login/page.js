@@ -2,10 +2,11 @@
 import React, { useEffect, useState } from 'react'
 import { useSession, signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { ToastContainer, toast } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 
-const Login = () => {
+// Wrap the component that uses useSearchParams in Suspense
+const LoginContent = () => {
     const { data: session } = useSession()
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -17,9 +18,9 @@ const Login = () => {
 
     useEffect(() => {
         if (session) {
-            router.push('/dashboard');
+            router.push('/dashboard')
         }
-    }, [session, router]);
+    }, [session, router])
 
     useEffect(() => {
         if (error) {
@@ -31,9 +32,9 @@ const Login = () => {
                 pauseOnHover: true,
                 draggable: true,
                 theme: "colored",
-            });
+            })
         }
-    }, [error]);
+    }, [error])
 
     const handleSignIn = async (provider) => {
         try {
@@ -52,7 +53,7 @@ const Login = () => {
                     pauseOnHover: true,
                     draggable: true,
                     theme: "colored",
-                });
+                })
             }
         } catch (error) {
             toast.error("An unexpected error occurred", {
@@ -63,7 +64,7 @@ const Login = () => {
                 pauseOnHover: true,
                 draggable: true,
                 theme: "colored",
-            });
+            })
         } finally {
             setIsLoading(prev => ({ ...prev, [provider]: false }))
         }
@@ -124,6 +125,15 @@ const Login = () => {
                 </div>
             </div>
         </>
+    )
+}
+
+// Main Login component with Suspense boundary
+const Login = () => {
+    return (
+        <Suspense fallback={<div>Loading authentication...</div>}>
+            <LoginContent />
+        </Suspense>
     )
 }
 
