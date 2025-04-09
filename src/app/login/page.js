@@ -1,11 +1,12 @@
+// app/login/page.tsx
 'use client'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, Suspense } from 'react'
 import { useSession, signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { ToastContainer, toast } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 
-const Login = () => {
+const LoginContent = () => {
     const { data: session } = useSession()
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -17,25 +18,29 @@ const Login = () => {
 
     useEffect(() => {
         if (session) {
-            router.push('/dashboard');
+            router.push('/dashboard')
         }
-    }, [session, router]);
+    }, [session, router])
 
     useEffect(() => {
         if (error) {
-            toast.error(error, {
-                position: "top-center",
-                autoClose: 5000,
-                hideProgressBar: false,
-                closeOnClick: true,
-                pauseOnHover: true,
-                draggable: true,
-                theme: "colored",
-            });
+            showErrorToast(error)
         }
-    }, [error]);
+    }, [error])
 
-    const handleSignIn = async (provider) => {
+    const showErrorToast = (message: string) => {
+        toast.error(message, {
+            position: "top-center",
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            theme: "colored",
+        })
+    }
+
+    const handleSignIn = async (provider: 'google' | 'github') => {
         try {
             setIsLoading(prev => ({ ...prev, [provider]: true }))
             const result = await signIn(provider, {
@@ -44,26 +49,13 @@ const Login = () => {
             })
 
             if (result?.error) {
-                toast.error(result.error, {
-                    position: "top-center",
-                    autoClose: 5000,
-                    hideProgressBar: false,
-                    closeOnClick: true,
-                    pauseOnHover: true,
-                    draggable: true,
-                    theme: "colored",
-                });
+                showErrorToast(result.error)
+            } else if (result?.url) {
+                router.push(result.url)
             }
         } catch (error) {
-            toast.error("An unexpected error occurred", {
-                position: "top-center",
-                autoClose: 5000,
-                hideProgressBar: false,
-                closeOnClick: true,
-                pauseOnHover: true,
-                draggable: true,
-                theme: "colored",
-            });
+            showErrorToast("An unexpected error occurred")
+            console.error("Authentication error:", error)
         } finally {
             setIsLoading(prev => ({ ...prev, [provider]: false }))
         }
@@ -124,6 +116,14 @@ const Login = () => {
                 </div>
             </div>
         </>
+    )
+}
+
+const Login = () => {
+    return (
+        <Suspense fallback={<div className="flex justify-center items-center h-screen">Loading authentication...</div>}>
+            <LoginContent />
+        </Suspense>
     )
 }
 
