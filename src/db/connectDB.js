@@ -1,12 +1,20 @@
-// db/connectDB.js
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/getmeachai";
+// Always use environment variable in production
+const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable');
+  throw new Error(
+    'Please define the MONGODB_URI environment variable in .env.local'
+  );
 }
 
+// Type check for MongoDB URI
+if (!MONGODB_URI.startsWith('mongodb')) {
+  throw new Error('Invalid MongoDB URI format');
+}
+
+// Cache connection across hot reloads
 let cached = global.mongoose;
 
 if (!cached) {
@@ -15,6 +23,7 @@ if (!cached) {
 
 async function connectDB() {
   if (cached.conn) {
+    console.log('Using existing MongoDB connection');
     return cached.conn;
   }
 
@@ -23,17 +32,29 @@ async function connectDB() {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       bufferCommands: false,
+      serverSelectionTimeoutMS: 10000, // 10 seconds for server selection
+      socketTimeoutMS: 30000, // 30 seconds for socket timeout
+      maxPoolSize: 5, // Maintain up to 5 connections
+      retryWrites: true,
+      w: 'majority'
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
+    cached.promise = mongoose.connect(MONGODB_URI, opts)
+      .then((mongoose) => {
+        console.log('MongoDB connected successfully');
+        return mongoose;
+      })
+      .catch((err) => {
+        console.error('MongoDB connection error:', err);
+        throw err;
+      });
   }
-  
+
   try {
     cached.conn = await cached.promise;
   } catch (e) {
     cached.promise = null;
+    console.error('MongoDB connection failed:', e);
     throw e;
   }
 
