@@ -1,64 +1,67 @@
 import mongoose from 'mongoose';
 
-// Always use environment variable in production
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
-  throw new Error(
-    'Please define the MONGODB_URI environment variable in .env.local'
-  );
+  throw new Error('Please define MONGODB_URI in .env.local');
 }
 
-// Type check for MongoDB URI
-if (!MONGODB_URI.startsWith('mongodb')) {
+if (!/^mongodb(\+srv)?:\/\//i.test(MONGODB_URI)) {
   throw new Error('Invalid MongoDB URI format');
 }
 
-// Cache connection across hot reloads
-let cached = global.mongoose;
+let cached = global.mongoose || { conn: null, promise: null };
 
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
+if (!global.mongoose) {
+  global.mongoose = cached;
 }
+
+const DB_OPTIONS = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  bufferCommands: false,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 20000,
+  maxPoolSize: 3,
+  minPoolSize: 1,
+  retryWrites: true,
+  w: 'majority',
+  connectTimeoutMS: 8000,
+};
 
 async function connectDB() {
   if (cached.conn) {
-    console.log('Using existing MongoDB connection');
     return cached.conn;
   }
 
   if (!cached.promise) {
-    const opts = {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      bufferCommands: false,
-      serverSelectionTimeoutMS: 10000, // 10 seconds for server selection
-      socketTimeoutMS: 30000, // 30 seconds for socket timeout
-      maxPoolSize: 5, // Maintain up to 5 connections
-      retryWrites: true,
-      w: 'majority'
-    };
-
-    cached.promise = mongoose.connect(MONGODB_URI, opts)
-      .then((mongoose) => {
-        console.log('MongoDB connected successfully');
-        return mongoose;
-      })
-      .catch((err) => {
-        console.error('MongoDB connection error:', err);
+    cached.promise = mongoose.connect(MONGODB_URI, DB_OPTIONS)
+      .then(mongoose => mongoose)
+      .catch(err => {
+        cached.promise = null;
         throw err;
       });
   }
 
   try {
     cached.conn = await cached.promise;
-  } catch (e) {
+  } catch (err) {
     cached.promise = null;
-    console.error('MongoDB connection failed:', e);
-    throw e;
+    throw err;
   }
 
   return cached.conn;
+}
+
+// Serverless connection cleanup
+if (process.env.VERCEL_ENV) {
+  process.on('beforeExit', async () => {
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.disconnect();
+      cached.conn = null;
+      cached.promise = null;
+    }
+  });
 }
 
 export default connectDB;
