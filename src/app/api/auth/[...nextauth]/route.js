@@ -33,83 +33,68 @@ const authOptions = {
     async signIn({ user, account, profile }) {
       try {
         if (!user?.email) {
-          throw new Error("Email required for authentication");
+          throw new Error("Email required");
         }
 
-        // Fast user data preparation before DB
+        // Fast user data preparation
         const userData = {
           email: user.email,
-          name: user.name || profile?.name || profile?.login || 'User',
-          profilePic: user.image || profile?.picture || profile?.avatar_url || '',
-          provider: account.provider,
-          providerId: user.id
+          name: user.name || profile?.name || 'User',
+          profilePic: user.image || '',
+          provider: account.provider
         };
 
-        // Connect with timeout
-        await Promise.race([
-          connectDB(),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('DB connection timeout')), 3000)
-          )
-        ]);
+        // Attempt connection with timeout
+        try {
+          await Promise.race([
+            connectDB(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('DB timeout')), 2500)
+          ]);
+        } catch (err) {
+          console.error("Connection attempt failed:", err.message);
+          // Allow login without DB (session will still work)
+          return true;
+        }
 
-        // Upsert operation (atomic)
-        await User.updateOne(
+        // Upsert user without waiting (fire-and-forget)
+        User.updateOne(
           { email: user.email },
           { $setOnInsert: userData },
           { upsert: true }
-        );
+        ).catch(err => console.error("User upsert failed:", err));
 
         return true;
       } catch (error) {
         console.error("SignIn Error:", error.message);
-        return `/login?error=${encodeURIComponent(
-          error.message.includes('timeout') 
-            ? 'Connection timeout - please try again' 
-            : 'Authentication failed'
-        )}`;
+        return true; // Always allow login attempt
       }
     },
     async session({ session }) {
       if (session?.user?.email) {
         try {
-          // Fast session data with timeout
-          const dbUser = await Promise.race([
-            User.findOne({ email: session.user.email })
-              .select('username name profilePic provider')
-              .maxTimeMS(2000)
-              .lean(),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Session data timeout')), 2500)
-            )
-          ]);
+          const dbUser = await User.findOne({ email: session.user.email })
+            .select('username name profilePic provider')
+            .maxTimeMS(2000)
+            .lean()
+            .catch(() => null);
           
           if (dbUser) {
-            session.user.username = dbUser.username;
-            session.user.name = dbUser.name;
-            session.user.image = dbUser.profilePic;
-            session.user.provider = dbUser.provider;
+            session.user = { ...session.user, ...dbUser };
           }
-        } catch (error) {
-          console.error("Session callback error:", error.message);
-          // Session still works without DB data
+        } catch (err) {
+          console.error("Session DB error:", err.message);
         }
       }
       return session;
-    },
-    async jwt({ token, user }) {
-      if (user) {
-        token.email = user.email;
-      }
-      return token;
     }
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-  },
-  debug: process.env.NODE_ENV === 'development',
+  }
 };
 
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST };
+export const config = {
+  api: {
+    externalResolver: true,
+  },
+};
+
+export default NextAuth(authOptions);

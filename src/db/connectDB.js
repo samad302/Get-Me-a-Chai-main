@@ -6,27 +6,19 @@ if (!MONGODB_URI) {
   throw new Error('Please define MONGODB_URI in .env.local');
 }
 
-if (!/^mongodb(\+srv)?:\/\//i.test(MONGODB_URI)) {
-  throw new Error('Invalid MongoDB URI format');
-}
-
+// Cache connection
 let cached = global.mongoose || { conn: null, promise: null };
-
-if (!global.mongoose) {
-  global.mongoose = cached;
-}
 
 const DB_OPTIONS = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
   bufferCommands: false,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 20000,
-  maxPoolSize: 3,
-  minPoolSize: 1,
+  serverSelectionTimeoutMS: 3000, // 3 seconds
+  socketTimeoutMS: 10000, // 10 seconds
+  maxPoolSize: 1, // Single connection for serverless
   retryWrites: true,
-  w: 'majority',
-  connectTimeoutMS: 8000,
+  retryReads: true,
+  connectTimeoutMS: 3000, // 3 seconds
 };
 
 async function connectDB() {
@@ -36,8 +28,12 @@ async function connectDB() {
 
   if (!cached.promise) {
     cached.promise = mongoose.connect(MONGODB_URI, DB_OPTIONS)
-      .then(mongoose => mongoose)
+      .then(mongoose => {
+        console.log('MongoDB connected');
+        return mongoose;
+      })
       .catch(err => {
+        console.error('MongoDB connection error:', err.message);
         cached.promise = null;
         throw err;
       });
@@ -53,11 +49,11 @@ async function connectDB() {
   return cached.conn;
 }
 
-// Serverless connection cleanup
-if (process.env.VERCEL_ENV) {
+// Close connection on Vercel shutdown
+if (process.env.VERCEL) {
   process.on('beforeExit', async () => {
-    if (mongoose.connection.readyState === 1) {
-      await mongoose.disconnect();
+    if (cached.conn) {
+      await cached.conn.disconnect();
       cached.conn = null;
       cached.promise = null;
     }
