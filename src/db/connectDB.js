@@ -6,19 +6,18 @@ if (!MONGODB_URI) {
   throw new Error('Please define MONGODB_URI in .env.local');
 }
 
-// Cache connection
+// Connection caching
 let cached = global.mongoose || { conn: null, promise: null };
 
 const DB_OPTIONS = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
   bufferCommands: false,
-  serverSelectionTimeoutMS: 3000, // 3 seconds
-  socketTimeoutMS: 10000, // 10 seconds
+  serverSelectionTimeoutMS: 3000,
+  socketTimeoutMS: 10000,
   maxPoolSize: 1, // Single connection for serverless
   retryWrites: true,
-  retryReads: true,
-  connectTimeoutMS: 3000, // 3 seconds
+  connectTimeoutMS: 3000,
 };
 
 async function connectDB() {
@@ -49,11 +48,11 @@ async function connectDB() {
   return cached.conn;
 }
 
-// Close connection on Vercel shutdown
-if (process.env.VERCEL) {
+// Serverless cleanup
+if (process.env.VERCEL_ENV) {
   process.on('beforeExit', async () => {
-    if (cached.conn) {
-      await cached.conn.disconnect();
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.disconnect();
       cached.conn = null;
       cached.promise = null;
     }

@@ -4,6 +4,16 @@ import GoogleProvider from 'next-auth/providers/google';
 import User from '@/models/User';
 import connectDB from '@/db/connectDB';
 
+// Timeout utility function
+const withTimeout = (promise, ms) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
+    )
+  ]);
+};
+
 const authOptions = {
   providers: [
     GitHubProvider({
@@ -32,52 +42,51 @@ const authOptions = {
   callbacks: {
     async signIn({ user, account, profile }) {
       try {
+        // Basic validation
         if (!user?.email) {
-          throw new Error("Email required");
+          throw new Error("Email required for authentication");
         }
 
-        // Fast user data preparation
+        // Prepare user data before DB operations
         const userData = {
           email: user.email,
           name: user.name || profile?.name || 'User',
-          profilePic: user.image || '',
-          provider: account.provider
+          profilePic: user.image || profile?.picture || '',
+          provider: account.provider,
+          providerId: user.id
         };
 
-        // Attempt connection with timeout
+        // Attempt DB connection with timeout
         try {
-          await Promise.race([
-            connectDB(),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('DB timeout')), 2500)
-          ]);
+          await withTimeout(connectDB(), 3000);
         } catch (err) {
-          console.error("Connection attempt failed:", err.message);
-          // Allow login without DB (session will still work)
+          console.error("DB connection timeout:", err.message);
+          // Allow login without DB write
           return true;
         }
 
-        // Upsert user without waiting (fire-and-forget)
+        // Fire-and-forget user upsert
         User.updateOne(
           { email: user.email },
           { $setOnInsert: userData },
           { upsert: true }
-        ).catch(err => console.error("User upsert failed:", err));
+        ).catch(err => console.error("User upsert error:", err));
 
         return true;
       } catch (error) {
         console.error("SignIn Error:", error.message);
-        return true; // Always allow login attempt
+        return true; // Always allow login
       }
     },
     async session({ session }) {
       if (session?.user?.email) {
         try {
-          const dbUser = await User.findOne({ email: session.user.email })
-            .select('username name profilePic provider')
-            .maxTimeMS(2000)
-            .lean()
-            .catch(() => null);
+          const dbUser = await withTimeout(
+            User.findOne({ email: session.user.email })
+              .select('username name profilePic provider')
+              .lean(),
+            2000
+          );
           
           if (dbUser) {
             session.user = { ...session.user, ...dbUser };
@@ -88,13 +97,21 @@ const authOptions = {
       }
       return session;
     }
-  }
+  },
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
+  },
+  debug: process.env.NODE_ENV === 'development',
 };
 
 export const config = {
+  runtime: 'nodejs', // Explicitly set runtime
   api: {
     externalResolver: true,
+    bodyParser: false
   },
 };
 
-export default NextAuth(authOptions);
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };
