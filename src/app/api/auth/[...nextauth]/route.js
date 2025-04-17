@@ -105,13 +105,15 @@ const authOptions = {
   debug: process.env.NODE_ENV === 'development',
 };
 
-export const config = {
-  runtime: 'nodejs', // Explicitly set runtime
-  api: {
-    externalResolver: true,
-    bodyParser: false
-  },
+const handler = NextAuth(authOptions);
+
+// New Next.js 14 way to export route handlers
+export { 
+  handler as GET, 
+  handler as POST,
+  handler as OPTIONS,
+  handler as HEAD
 };
 
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST };
+// New way to specify runtime (replace the old config export)
+export const runtime = 'nodejs'; // Explicitly set Node.js runtime
